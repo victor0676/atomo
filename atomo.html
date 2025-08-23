@@ -1,13 +1,432 @@
-<!Doctype html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <link rel="icon" href="atomo.png" size="32x32" />
+  <title>Átomo de Oxígeno 3D — Modelo de Rutherford</title>
+  <meta name="theme-color" content="#14b8a6" />
+  <style>
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b1220; color:#e5e7eb; }
+    #app { position:fixed; inset:0; }
+    .hud {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: 16px; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+      background: rgba(2,6,23,.7); border:1px solid rgba(148,163,184,.25);
+      padding: .75rem 1rem; border-radius: 14px; backdrop-filter: blur(8px);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
+      box-shadow: 0 8px 30px rgba(0,0,0,.35);
+    }
+    .btn {
+      appearance:none; border:1px solid rgba(148,163,184,.35); background:#0f172a; color:#e5e7eb; 
+      padding:.5rem .8rem; border-radius:12px; cursor:pointer; font-weight:600; font-size:14px;
+    }
+    .btn.primary { background:#14b8a6; border-color:#2dd4bf; color:#001010; }
+    .badge { font-size:12px; opacity:.9 }
+    .legend {
+      position:fixed; top:12px; left:12px; right:12px; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
+    }
+    .legend > * { background: rgba(2,6,23,.7); border:1px solid rgba(148,163,184,.25);
+      padding:.5rem .7rem; border-radius: 12px; }
+    .dot { width:12px; height:12px; border-radius:999px; display:inline-block; margin-right:6px; vertical-align:middle; }
+    .dot.nucleo { background:#f59e0b; }      /* ámbar */
+    .dot.electron { background:#34d399; }    /* esmeralda */
+    .dot.orbita { background:#a78bfa; }      /* violeta */
+    #errorBanner {
+      position: fixed; top: 0; left: 0; right: 0;
+      background: #991b1b; color: #fff; padding: 10px 14px; font-family: ui-sans-serif, system-ui;
+      display: none; z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+  <div id="errorBanner"></div>
+  <div id="app"></div>
 
-<html>
-  <head>
-    <meta lang="ES">
-    <meta charset="utf-8">
-    <link rel="icon" href="atomo.png" />
-    <title>Atomo</title>
-  </head>
-  <body>
-    Hola, átomo de oxígeno
-  </body>
+  <div class="legend">
+    <div><span class="dot nucleo"></span> Núcleo (p<sup>+</sup>, n<sup>0</sup>)</div>
+    <div><span class="dot electron"></span> Electrones (e<sup>-</sup>)</div>
+    <div><span class="dot orbita"></span> Órbitas elípticas (Rutherford, 1911)</div>
+    <div class="badge">Oxígeno (Z=8) · Modelo clásico (esquema didáctico)</div>
+  </div>
+
+  <div class="hud" id="hud">
+    <button id="gyroBtn" class="btn primary">Activar giroscopio</button>
+    <button id="labelsBtn" class="btn">Mostrar etiquetas</button>
+    <button id="autoBtn" class="btn">Auto-rotar</button>
+    <button id="resetBtn" class="btn">Reiniciar vista</button>
+    <span class="badge">Consejo: arrastra para rotar, pellizca p/ zoom</span>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+  <script>
+    const banner = document.getElementById('errorBanner');
+    function showErr(msg){
+      banner.style.display = 'block';
+      banner.textContent = msg;
+      console.error(msg);
+    }
+    window.addEventListener('error', (e)=>{
+      showErr('Error en el visor: ' + (e?.message || e));
+    });
+
+    (function checkWebGL(){
+      const canvas = document.createElement('canvas');
+      const ok = !!(canvas.getContext('webgl') || canvas.getContext('webgl2'));
+      if(!ok){ showErr('Tu navegador no tiene WebGL habilitado. Activa la aceleración por hardware o usa otro navegador.'); }
+    })();
+
+    if (!window.THREE){ showErr('No se pudo cargar THREE.js. Revisa tu conexión a internet o políticas de red.'); }
+
+    (function(){
+      try {
+        const DEG2RAD = (THREE.MathUtils && THREE.MathUtils.degToRad) ? THREE.MathUtils.degToRad : (d => d * Math.PI / 180);
+
+        const app = document.getElementById('app');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0b1220);
+
+        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2.1, 7.5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        app.appendChild(renderer.domElement);
+
+        // Luces
+        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambient);
+        const key = new THREE.PointLight(0xffffff, 1.1);
+        key.position.set(5, 5, 6);
+        scene.add(key);
+        const rim = new THREE.PointLight(0x66ccff, 0.8);
+        rim.position.set(-6, -3, -4);
+        scene.add(rim);
+
+        // Fondo estelar
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 600;
+        const starPos = new Float32Array(starCount * 3);
+        for (let i=0;i<starCount;i++){
+          const r = 60 * Math.cbrt(Math.random());
+          const t = Math.random() * Math.PI * 2;
+          const p = Math.acos(2*Math.random()-1);
+          starPos[i*3] = r*Math.sin(p)*Math.cos(t);
+          starPos[i*3+1] = r*Math.sin(p)*Math.sin(t);
+          starPos[i*3+2] = r*Math.cos(p);
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const starMat = new THREE.PointsMaterial({ size: 0.14, color: 0x93c5fd });
+        const stars = new THREE.Points(starGeo, starMat);
+        scene.add(stars);
+
+        // Materiales
+        const nucleoMat = new THREE.MeshPhysicalMaterial({
+          color: 0xf59e0b, roughness: 0.25, metalness: 0.15, clearcoat: 0.5, clearcoatRoughness: 0.25
+        });
+        const electronMat = new THREE.MeshPhysicalMaterial({
+          color: 0x34d399, roughness: 0.35, metalness: 0.25
+        });
+        const orbitaMat = new THREE.LineBasicMaterial({ color: 0xa78bfa, transparent: true, opacity: 0.5 });
+
+        // Núcleo
+        const nucleoGeo = new THREE.SphereGeometry(1.1, 64, 64);
+        const nucleo = new THREE.Mesh(nucleoGeo, nucleoMat);
+        scene.add(nucleo);
+
+        // ===== Rutherford: 8 electrones en órbitas elípticas (orientaciones variadas) =====
+        const electrons = [];
+        const orbitGroups = new THREE.Group();
+        scene.add(orbitGroups);
+
+        function makeEllipsePoints(a, b, segments=180){
+          const pts = [];
+          for (let i=0;i<segments;i++){
+            const t = (i/segments) * Math.PI*2;
+            pts.push(new THREE.Vector3(a*Math.cos(t), 0, b*Math.sin(t)));
+          }
+          return pts;
+        }
+
+        function addElectron(opts){
+          const a = opts.a, b = opts.b;                 // semiejes
+          const speed = opts.speed;                     // rad/s aproximado
+          const phase = opts.phase || 0;
+          const tiltX = DEG2RAD(opts.tiltX || 0);
+          const tiltY = DEG2RAD(opts.tiltY || 0);
+          const color = opts.color || 0x34d399;
+
+          // Órbita (línea elíptica)
+          const pts = makeEllipsePoints(a, b, 240);
+          const geo = new THREE.BufferGeometry().setFromPoints(pts);
+          const line = new THREE.LineLoop(geo, orbitaMat);
+
+          // Grupo para orientar la elipse en el espacio
+          const g = new THREE.Group();
+          g.rotation.x = tiltX;
+          g.rotation.y = tiltY;
+          g.add(line);
+          orbitGroups.add(g);
+
+          // Electrón (esfera pequeña)
+          const e = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24),
+                                   new THREE.MeshPhysicalMaterial({color, roughness:0.35, metalness:0.25}));
+          e.userData = { a, b, speed, phase, angle: phase };
+          g.add(e);
+
+          electrons.push({ mesh: e, group: g });
+          return e;
+        }
+
+        // Distribución de 8 electrones con órbitas variadas
+        const configs = [
+          { a: 2.3, b: 1.8, speed:  0.9, tiltX: 10, tiltY: 20, phase: 0.0 },
+          { a: 2.5, b: 2.5, speed:  0.7, tiltX: 35, tiltY: -10, phase: 0.6 },
+          { a: 2.8, b: 1.6, speed:  1.1, tiltX: -20, tiltY: 15, phase: 1.2 },
+          { a: 3.0, b: 2.2, speed:  0.8, tiltX: 5, tiltY: 45, phase: 1.8 },
+          { a: 3.2, b: 2.9, speed:  0.6, tiltX: -35, tiltY: 25, phase: 2.4 },
+          { a: 3.4, b: 1.9, speed:  1.0, tiltX: 28, tiltY: -30, phase: 3.1 },
+          { a: 3.7, b: 2.6, speed:  0.7, tiltX: -15, tiltY: -15, phase: 3.7 },
+          { a: 4.0, b: 2.0, speed:  0.9, tiltX: 15, tiltY: 70, phase: 4.3 },
+        ];
+        const electronRefs = configs.map(cfg => addElectron(cfg));
+
+        // ===== Etiquetas con sprites (sin librerías) =====
+        const labelGroup = new THREE.Group(); scene.add(labelGroup);
+
+        function makeTextSprite(text, opts={}){
+          const pad = opts.pad ?? 8;
+          const font = opts.font ?? '600 22px ui-sans-serif, -apple-system, Segoe UI, Roboto';
+          const bg = opts.bg ?? 'rgba(2,6,23,0.80)';
+          const fg = opts.fg ?? '#e5e7eb';
+          const border = opts.border ?? 'rgba(148,163,184,0.35)';
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          ctx.font = font;
+          const lines = String(text).split(/\n/);
+          const metrics = lines.map(l => ctx.measureText(l));
+          const lineHeight = 28;
+          const width = Math.max(...metrics.map(m => m.width)) + pad*2;
+          const height = lineHeight*lines.length + pad*2;
+          const scale = 2;
+          canvas.width = Math.ceil(width*scale);
+          canvas.height = Math.ceil(height*scale);
+          ctx.scale(scale, scale);
+          ctx.font = font;
+          // Fondo + borde redondeado
+          const r = 10;
+          ctx.fillStyle = bg;
+          ctx.strokeStyle = border;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(pad+r, pad);
+          ctx.lineTo(width-pad-r, pad);
+          ctx.quadraticCurveTo(width-pad, pad, width-pad, pad+r);
+          ctx.lineTo(width-pad, height-pad-r);
+          ctx.quadraticCurveTo(width-pad, height-pad, width-pad-r, height-pad);
+          ctx.lineTo(pad+r, height-pad);
+          ctx.quadraticCurveTo(pad, height-pad, pad, height-pad-r);
+          ctx.lineTo(pad, pad+r);
+          ctx.quadraticCurveTo(pad, pad, pad+r, pad);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          // Texto
+          ctx.fillStyle = fg;
+          ctx.textBaseline = 'middle';
+          lines.forEach((l, i) => {
+            const tm = ctx.measureText(l);
+            ctx.fillText(l, (width - tm.width)/2, pad + lineHeight*(i+0.5));
+          });
+          const tex = new THREE.CanvasTexture(canvas);
+          tex.minFilter = THREE.LinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true });
+          const sprite = new THREE.Sprite(mat);
+          const uiWorldSize = opts.worldSize ?? 0.9;
+          sprite.scale.set(uiWorldSize * (width/height), uiWorldSize, 1);
+          sprite.renderOrder = 999;
+          return sprite;
+        }
+
+        const labelNucleo = makeTextSprite('Núcleo', { worldSize: 0.9 });
+        labelNucleo.position.set(0, 1.6, 0);
+        nucleo.add(labelNucleo); labelGroup.add(labelNucleo);
+
+        const labelEjElectron = makeTextSprite('e⁻', { worldSize: 0.5 });
+        labelEjElectron.position.set(0, 0.45, 0);
+        electronRefs[0].add(labelEjElectron); labelGroup.add(labelEjElectron);
+
+        // ===== Controles integrados (sin OrbitControls) =====
+        class SimpleOrbit {
+          constructor(camera, dom, target=new THREE.Vector3(0,0,0)){
+            this.camera = camera; this.dom = dom; this.target = target.clone();
+            this.spherical = new THREE.Spherical();
+            const offset = new THREE.Vector3().copy(camera.position).sub(this.target);
+            this.spherical.setFromVector3(offset);
+            this.minDistance = 3.2; this.maxDistance = 18;
+            this.rotateSpeed = 1.0; this.zoomSpeed = 1.0;
+            this.damping = 0.1;
+            this._deltaTheta = 0; this._deltaPhi = 0; this._scale = 1;
+            this.autoRotate = false;
+            this.autoRotateSpeed = 0.8;
+            this._state = null;
+            this._pointer = new THREE.Vector2();
+            this._pointerStart = new THREE.Vector2();
+            this._touchDistance = 0;
+            dom.addEventListener('pointerdown', e=>this.onPointerDown(e));
+            window.addEventListener('pointermove', e=>this.onPointerMove(e));
+            window.addEventListener('pointerup', e=>this.onPointerUp(e), {passive:true});
+            dom.addEventListener('wheel', e=>this.onWheel(e), { passive:false });
+            dom.addEventListener('touchstart', e=>this.onTouchStart(e), { passive:false });
+            dom.addEventListener('touchmove', e=>this.onTouchMove(e), { passive:false });
+            dom.addEventListener('touchend', e=>this.onTouchEnd(e));
+          }
+          onPointerDown(e){ this.dom.setPointerCapture(e.pointerId); this._state='rotate'; this._pointerStart.set(e.clientX, e.clientY); }
+          onPointerMove(e){
+            if (this._state !== 'rotate') return;
+            this._pointer.set(e.clientX, e.clientY);
+            const dx = (this._pointer.x - this._pointerStart.x) / this.dom.clientHeight;
+            const dy = (this._pointer.y - this._pointerStart.y) / this.dom.clientHeight;
+            this._deltaTheta -= 2*Math.PI * dx * this.rotateSpeed;
+            this._deltaPhi   -= 2*Math.PI * dy * this.rotateSpeed * 0.6;
+            this._pointerStart.copy(this._pointer);
+          }
+          onPointerUp(){ this._state = null; }
+          onWheel(e){ e.preventDefault(); const delta = e.deltaY > 0 ? 1 : -1; const f = 1 + 0.08*this.zoomSpeed; this._scale *= delta>0 ? f : 1/f; }
+          onTouchStart(e){
+            if (e.touches.length===1){ this._state='rotate'; this._pointerStart.set(e.touches[0].clientX, e.touches[0].clientY); }
+            else if (e.touches.length===2){ this._state='zoom'; const dx=e.touches[0].clientX-e.touches[1].clientX; const dy=e.touches[0].clientY-e.touches[1].clientY; this._touchDistance=Math.hypot(dx,dy); }
+          }
+          onTouchMove(e){
+            if (this._state==='rotate' && e.touches.length===1){
+              const x=e.touches[0].clientX, y=e.touches[0].clientY;
+              const dx=(x-this._pointerStart.x)/this.dom.clientHeight;
+              const dy=(y-this._pointerStart.y)/this.dom.clientHeight;
+              this._deltaTheta -= 2*Math.PI * dx * this.rotateSpeed;
+              this._deltaPhi   -= 2*Math.PI * dy * this.rotateSpeed * 0.6;
+              this._pointerStart.set(x,y);
+            } else if (this._state==='zoom' && e.touches.length===2){
+              const dx=e.touches[0].clientX-e.touches[1].clientX;
+              const dy=e.touches[0].clientY-e.touches[1].clientY;
+              const dist=Math.hypot(dx,dy);
+              const f = 1 + (Math.abs(dist-this._touchDistance)/200) * this.zoomSpeed;
+              this._scale *= dist < this._touchDistance ? f : 1/f;
+              this._touchDistance = dist;
+            }
+            e.preventDefault();
+          }
+          onTouchEnd(){ this._state=null; }
+          reset(){
+            const offset = new THREE.Vector3(0,2.1,7.5).sub(this.target);
+            this.spherical.setFromVector3(offset);
+          }
+          update(dt){
+            if (this.autoRotate){ this._deltaTheta -= this.autoRotateSpeed * dt; }
+            this.spherical.theta += this._deltaTheta * this.damping;
+            this.spherical.phi   += this._deltaPhi   * this.damping;
+            this.spherical.makeSafe();
+            this.spherical.radius *= this._scale;
+            this.spherical.radius = Math.min(this.maxDistance, Math.max(this.minDistance, this.spherical.radius));
+            this._deltaTheta *= (1 - this.damping);
+            this._deltaPhi   *= (1 - this.damping);
+            this._scale = 1;
+            const offset = new THREE.Vector3().setFromSpherical(this.spherical);
+            this.camera.position.copy(this.target).add(offset);
+            this.camera.lookAt(this.target);
+          }
+        }
+        const orbit = new SimpleOrbit(camera, renderer.domElement);
+        orbit.autoRotate = false;
+
+        // Giroscopio básico
+        let gyroActive = false;
+        let baseBeta = null, baseGamma = null;
+        function enableGyro(){
+          const anyDevOrient = window.DeviceOrientationEvent;
+          const attach = ()=>{
+            gyroActive = true;
+            baseBeta = null; baseGamma = null;
+            window.addEventListener('deviceorientation', (e)=>{
+              if (!gyroActive) return;
+              if (baseBeta === null){ baseBeta = e.beta || 0; baseGamma = e.gamma || 0; return; }
+              const dBeta = (e.beta || 0) - baseBeta;
+              const dGamma = (e.gamma || 0) - baseGamma;
+              orbit._deltaPhi   -= (dBeta * Math.PI/180) * 0.5;
+              orbit._deltaTheta += (dGamma * Math.PI/180) * 0.5;
+            });
+          };
+          if (anyDevOrient && typeof anyDevOrient.requestPermission === 'function'){
+            anyDevOrient.requestPermission().then(state => {
+              if (state === 'granted'){ attach(); }
+              else alert('Permiso denegado. Puedes usar el dedo para rotar o activar auto-rotación.');
+            }).catch(err => alert('No se pudo solicitar permiso: ' + err));
+          } else { attach(); }
+        }
+
+        // HUD
+        const gyroBtn = document.getElementById('gyroBtn');
+        const labelsBtn = document.getElementById('labelsBtn');
+        const autoBtn = document.getElementById('autoBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        let labelsVisible = false;
+        labelsBtn.addEventListener('click', ()=>{
+          labelsVisible = !labelsVisible;
+          labelGroup.visible = labelsVisible;
+          labelsBtn.textContent = labelsVisible ? 'Ocultar etiquetas' : 'Mostrar etiquetas';
+          labelsBtn.classList.toggle('primary', labelsVisible);
+        });
+
+        autoBtn.addEventListener('click', ()=>{
+          orbit.autoRotate = !orbit.autoRotate;
+          autoBtn.classList.toggle('primary', orbit.autoRotate);
+          autoBtn.textContent = orbit.autoRotate ? 'Detener auto-rotación' : 'Auto-rotar';
+        });
+        resetBtn.addEventListener('click', ()=>{ orbit.reset(); });
+        gyroBtn.addEventListener('click', ()=>{
+          if (!gyroActive){ enableGyro(); gyroBtn.textContent='Giroscopio activo'; gyroBtn.disabled = true; }
+        });
+
+        // Animación
+        const clock = new THREE.Clock();
+        function animate(){
+          const dt = clock.getDelta();
+          const t = clock.elapsedTime;
+
+          // Pulso núcleo
+          nucleo.scale.setScalar(1 + Math.sin(t*1.6)*0.015);
+
+          // Avanzar cada electrón en su órbita
+          for (const obj of electrons){
+            const e = obj.mesh;
+            const data = e.userData;
+            data.angle += data.speed * dt;
+            const x = data.a * Math.cos(data.angle);
+            const z = data.b * Math.sin(data.angle);
+            e.position.set(x, 0, z);
+          }
+
+          orbit.update(dt);
+          renderer.render(scene, camera);
+          requestAnimationFrame(animate);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        }, { passive:true });
+
+      } catch (e){
+        showErr('Excepción al iniciar: ' + (e?.message || e));
+        console.error(e);
+      }
+    })();
+  </script>
+</body>
 </html>
