@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <link rel="icon" href="atomo.png" size="32x32" />
-  <title>Átomo de Oxígeno 3D — Modelo de Rutherford</title>
+  <title>Átomo de Oxígeno 3D — Núcleo transparente (v6.5)</title>
   <meta name="theme-color" content="#14b8a6" />
   <style>
     html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b1220; color:#e5e7eb; }
@@ -17,27 +17,18 @@
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
       box-shadow: 0 8px 30px rgba(0,0,0,.35);
     }
-    .btn {
-      appearance:none; border:1px solid rgba(148,163,184,.35); background:#0f172a; color:#e5e7eb; 
-      padding:.5rem .8rem; border-radius:12px; cursor:pointer; font-weight:600; font-size:14px;
-    }
+    .btn { appearance:none; border:1px solid rgba(148,163,184,.35); background:#0f172a; color:#e5e7eb; 
+      padding:.5rem .8rem; border-radius:12px; cursor:pointer; font-weight:600; font-size:14px; }
     .btn.primary { background:#14b8a6; border-color:#2dd4bf; color:#001010; }
     .badge { font-size:12px; opacity:.9 }
-    .legend {
-      position:fixed; top:12px; left:12px; right:12px; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
-    }
-    .legend > * { background: rgba(2,6,23,.7); border:1px solid rgba(148,163,184,.25);
-      padding:.5rem .7rem; border-radius: 12px; }
+    .legend { position:fixed; top:12px; left:12px; right:12px; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto; }
+    .legend > * { background: rgba(2,6,23,.7); border:1px solid rgba(148,163,184,.25); padding:.5rem .7rem; border-radius: 12px; }
     .dot { width:12px; height:12px; border-radius:999px; display:inline-block; margin-right:6px; vertical-align:middle; }
-    .dot.nucleo { background:#f59e0b; }      /* ámbar */
-    .dot.electron { background:#34d399; }    /* esmeralda */
-    .dot.orbita { background:#a78bfa; }      /* violeta */
-    #errorBanner {
-      position: fixed; top: 0; left: 0; right: 0;
-      background: #991b1b; color: #fff; padding: 10px 14px; font-family: ui-sans-serif, system-ui;
-      display: none; z-index: 9999;
-    }
+    .dot.nucleo { background:#f59e0b; } .dot.electron { background:#34d399; } .dot.orbita { background:#a78bfa; }
+    .dot.proton { background:#ef4444; } .dot.neutron { background:#60a5fa; }
+    #errorBanner { position: fixed; top: 0; left: 0; right: 0; background: #991b1b; color: #fff; padding: 10px 14px; font-family: ui-sans-serif, system-ui;
+      display: none; z-index: 9999; }
   </style>
 </head>
 <body>
@@ -46,9 +37,11 @@
 
   <div class="legend">
     <div><span class="dot nucleo"></span> Núcleo (p<sup>+</sup>, n<sup>0</sup>)</div>
+    <div><span class="dot proton"></span> Protones (p<sup>+</sup>)</div>
+    <div><span class="dot neutron"></span> Neutrones (n<sup>0</sup>)</div>
     <div><span class="dot electron"></span> Electrones (e<sup>-</sup>)</div>
-    <div><span class="dot orbita"></span> Órbitas elípticas (Rutherford, 1911)</div>
-    <div class="badge">Oxígeno (Z=8) · Modelo clásico (esquema didáctico)</div>
+    <div><span class="dot orbita"></span> Órbitas elípticas</div>
+    <div class="badge">Oxígeno (Z=8) · K=2, L=6 · Núcleo: 8 p<sup>+</sup>, 8 n<sup>0</sup></div>
   </div>
 
   <div class="hud" id="hud">
@@ -56,376 +49,198 @@
     <button id="labelsBtn" class="btn">Mostrar etiquetas</button>
     <button id="autoBtn" class="btn">Auto-rotar</button>
     <button id="resetBtn" class="btn">Reiniciar vista</button>
-    <span class="badge">Consejo: arrastra para rotar, pellizca p/ zoom</span>
+    <span class="badge">Arrastra para rotar · pellizca para zoom</span>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
   <script>
     const banner = document.getElementById('errorBanner');
-    function showErr(msg){
-      banner.style.display = 'block';
-      banner.textContent = msg;
-      console.error(msg);
-    }
-    window.addEventListener('error', (e)=>{
-      showErr('Error en el visor: ' + (e?.message || e));
-    });
-
-    (function checkWebGL(){
-      const canvas = document.createElement('canvas');
-      const ok = !!(canvas.getContext('webgl') || canvas.getContext('webgl2'));
-      if(!ok){ showErr('Tu navegador no tiene WebGL habilitado. Activa la aceleración por hardware o usa otro navegador.'); }
-    })();
-
-    if (!window.THREE){ showErr('No se pudo cargar THREE.js. Revisa tu conexión a internet o políticas de red.'); }
+    function showErr(msg){ banner.style.display='block'; banner.textContent=msg; console.error(msg); }
+    window.addEventListener('error', e=> showErr('Error en el visor: ' + (e?.message || e)));
 
     (function(){
-      try {
-        const DEG2RAD = (THREE.MathUtils && THREE.MathUtils.degToRad) ? THREE.MathUtils.degToRad : (d => d * Math.PI / 180);
+      try{
+        if (!window.THREE){ showErr('No se cargó THREE.js (CDN). Verifica conexión o usa versión offline.'); return; }
+        const DEG = (THREE.MathUtils && THREE.MathUtils.degToRad) ? THREE.MathUtils.degToRad : (d=>d*Math.PI/180);
 
-        const app = document.getElementById('app');
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0b1220);
-
-        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 2.1, 7.5);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        const app=document.getElementById('app');
+        const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0b1220);
+        const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 1000); camera.position.set(0,2.1,7.5);
+        const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
         app.appendChild(renderer.domElement);
 
         // Luces
-        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambient);
-        const key = new THREE.PointLight(0xffffff, 1.1);
-        key.position.set(5, 5, 6);
-        scene.add(key);
-        const rim = new THREE.PointLight(0x66ccff, 0.8);
-        rim.position.set(-6, -3, -4);
-        scene.add(rim);
-
-        // Fondo estelar
-        const starGeo = new THREE.BufferGeometry();
-        const starCount = 600;
-        const starPos = new Float32Array(starCount * 3);
-        for (let i=0;i<starCount;i++){
-          const r = 60 * Math.cbrt(Math.random());
-          const t = Math.random() * Math.PI * 2;
-          const p = Math.acos(2*Math.random()-1);
-          starPos[i*3] = r*Math.sin(p)*Math.cos(t);
-          starPos[i*3+1] = r*Math.sin(p)*Math.sin(t);
-          starPos[i*3+2] = r*Math.cos(p);
-        }
-        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-        const starMat = new THREE.PointsMaterial({ size: 0.14, color: 0x93c5fd });
-        const stars = new THREE.Points(starGeo, starMat);
-        scene.add(stars);
+        scene.add(new THREE.AmbientLight(0xffffff,.6));
+        const key=new THREE.PointLight(0xffffff,1.1); key.position.set(5,5,6); scene.add(key);
+        const rim=new THREE.PointLight(0x66ccff,.8); rim.position.set(-6,-3,-4); scene.add(rim);
 
         // Materiales
-        const nucleoMat = new THREE.MeshPhysicalMaterial({
-          color: 0xf59e0b, roughness: 0.25, metalness: 0.15, clearcoat: 0.5, clearcoatRoughness: 0.25
+        const electronMat=new THREE.MeshPhysicalMaterial({color:0x34d399, roughness:.35, metalness:.25});
+        const orbitaMat=new THREE.LineBasicMaterial({color:0xa78bfa, transparent:true, opacity:.6});
+        const protonMat=new THREE.MeshPhysicalMaterial({color:0xef4444, roughness:.3, metalness:.2});
+        const neutronMat=new THREE.MeshPhysicalMaterial({color:0x60a5fa, roughness:.35, metalness:.15});
+
+        // Núcleo transparente (para ver los nucleones)
+        const nucleusRadius = 1.15;
+        const nucleoMat=new THREE.MeshPhysicalMaterial({
+          color: 0xf59e0b,
+          roughness: 0.2,
+          metalness: 0.15,
+          clearcoat: 0.2,
+          transparent: true,
+          opacity: 0.42,      // ~42% visible
+          depthWrite: false,  // para no tapar a los nucleones detrás
+          side: THREE.DoubleSide
         });
-        const electronMat = new THREE.MeshPhysicalMaterial({
-          color: 0x34d399, roughness: 0.35, metalness: 0.25
-        });
-        const orbitaMat = new THREE.LineBasicMaterial({ color: 0xa78bfa, transparent: true, opacity: 0.5 });
+        const nucleo=new THREE.Mesh(new THREE.SphereGeometry(nucleusRadius,64,64), nucleoMat); scene.add(nucleo);
 
-        // Núcleo
-        const nucleoGeo = new THREE.SphereGeometry(1.1, 64, 64);
-        const nucleo = new THREE.Mesh(nucleoGeo, nucleoMat);
-        scene.add(nucleo);
+        // ========= Nucleones (8 p+, 8 n0) =========
+        const nucleonR = 0.22;
+        const innerR = nucleusRadius - (nucleonR + 0.10);
+        const nucleones = new THREE.Group(); nucleo.add(nucleones);
 
-        // ===== Rutherford: 8 electrones en órbitas elípticas (orientaciones variadas) =====
-        const electrons = [];
-        const orbitGroups = new THREE.Group();
-        scene.add(orbitGroups);
+        function v(x,y,z){ return new THREE.Vector3(x,y,z); }
+        const cubeDirs = [
+          v(1,1,1), v(1,1,-1), v(1,-1,1), v(1,-1,-1),
+          v(-1,1,1), v(-1,1,-1), v(-1,-1,1), v(-1,-1,-1),
+        ].map(vv => vv.normalize());
 
-        function makeEllipsePoints(a, b, segments=180){
-          const pts = [];
-          for (let i=0;i<segments;i++){
-            const t = (i/segments) * Math.PI*2;
-            pts.push(new THREE.Vector3(a*Math.cos(t), 0, b*Math.sin(t)));
-          }
-          return pts;
+        const rotQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(DEG(25), DEG(35), DEG(-15)));
+        const cubeDirsRot = cubeDirs.map(vv => vv.clone().applyQuaternion(rotQ));
+
+        const nucleonGeo = new THREE.SphereGeometry(nucleonR, 24, 24);
+        const protons = [], neutrons = [];
+        const jitterAmp = 0.08;
+
+        function placeAt(dir, mat, arr){
+          const base = dir.clone().multiplyScalar(innerR);
+          base.add(new THREE.Vector3((Math.random()-0.5)*jitterAmp, (Math.random()-0.5)*jitterAmp, (Math.random()-0.5)*jitterAmp));
+          base.setLength(Math.min(base.length(), innerR));
+          const m = new THREE.Mesh(nucleonGeo, mat);
+          m.position.copy(base);
+          m.userData = { base: base.clone(), phase: Math.random()*Math.PI*2 };
+          nucleones.add(m); arr.push(m);
+          return m;
         }
 
-        function addElectron(opts){
-          const a = opts.a, b = opts.b;                 // semiejes
-          const speed = opts.speed;                     // rad/s aproximado
-          const phase = opts.phase || 0;
-          const tiltX = DEG2RAD(opts.tiltX || 0);
-          const tiltY = DEG2RAD(opts.tiltY || 0);
-          const color = opts.color || 0x34d399;
+        for(let i=0;i<8;i++){ placeAt(cubeDirs[i], protonMat, protons); }
+        for(let i=0;i<8;i++){ placeAt(cubeDirsRot[i], neutronMat, neutrons); }
 
-          // Órbita (línea elíptica)
-          const pts = makeEllipsePoints(a, b, 240);
-          const geo = new THREE.BufferGeometry().setFromPoints(pts);
-          const line = new THREE.LineLoop(geo, orbitaMat);
+        // ========= Órbitas y electrones =========
+        const orbitsGroup=new THREE.Group(); scene.add(orbitsGroup);
+        const K=new THREE.Group(), L=new THREE.Group(); orbitsGroup.add(K); orbitsGroup.add(L);
 
-          // Grupo para orientar la elipse en el espacio
-          const g = new THREE.Group();
-          g.rotation.x = tiltX;
-          g.rotation.y = tiltY;
-          g.add(line);
-          orbitGroups.add(g);
-
-          // Electrón (esfera pequeña)
-          const e = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 24),
-                                   new THREE.MeshPhysicalMaterial({color, roughness:0.35, metalness:0.25}));
-          e.userData = { a, b, speed, phase, angle: phase };
-          g.add(e);
-
-          electrons.push({ mesh: e, group: g });
-          return e;
+        function ellipseLine(a,b,seg=240){
+          const pts=[]; for(let i=0;i<seg;i++){ const t=i/seg*Math.PI*2; pts.push(new THREE.Vector3(a*Math.cos(t),0,b*Math.sin(t))); }
+          return new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), orbitaMat);
         }
+        const aK=2.4,bK=2.0, aL=3.8,bL=3.0;
+        const orbitK=ellipseLine(aK,bK), orbitL=ellipseLine(aL,bL);
+        K.add(orbitK); L.add(orbitL);
+        K.rotation.set(DEG(78), DEG(-10), DEG(6));
+        L.rotation.set(DEG(62), DEG(28),  DEG(-12));
 
-        // Distribución de 8 electrones con órbitas variadas
-        const configs = [
-          { a: 2.3, b: 1.8, speed:  0.9, tiltX: 10, tiltY: 20, phase: 0.0 },
-          { a: 2.5, b: 2.5, speed:  0.7, tiltX: 35, tiltY: -10, phase: 0.6 },
-          { a: 2.8, b: 1.6, speed:  1.1, tiltX: -20, tiltY: 15, phase: 1.2 },
-          { a: 3.0, b: 2.2, speed:  0.8, tiltX: 5, tiltY: 45, phase: 1.8 },
-          { a: 3.2, b: 2.9, speed:  0.6, tiltX: -35, tiltY: 25, phase: 2.4 },
-          { a: 3.4, b: 1.9, speed:  1.0, tiltX: 28, tiltY: -30, phase: 3.1 },
-          { a: 3.7, b: 2.6, speed:  0.7, tiltX: -15, tiltY: -15, phase: 3.7 },
-          { a: 4.0, b: 2.0, speed:  0.9, tiltX: 15, tiltY: 70, phase: 4.3 },
-        ];
-        const electronRefs = configs.map(cfg => addElectron(cfg));
-
-        // ===== Etiquetas con sprites (sin librerías) =====
-        const labelGroup = new THREE.Group(); scene.add(labelGroup);
-
-        function makeTextSprite(text, opts={}){
-          const pad = opts.pad ?? 8;
-          const font = opts.font ?? '600 22px ui-sans-serif, -apple-system, Segoe UI, Roboto';
-          const bg = opts.bg ?? 'rgba(2,6,23,0.80)';
-          const fg = opts.fg ?? '#e5e7eb';
-          const border = opts.border ?? 'rgba(148,163,184,0.35)';
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          ctx.font = font;
-          const lines = String(text).split(/\n/);
-          const metrics = lines.map(l => ctx.measureText(l));
-          const lineHeight = 28;
-          const width = Math.max(...metrics.map(m => m.width)) + pad*2;
-          const height = lineHeight*lines.length + pad*2;
-          const scale = 2;
-          canvas.width = Math.ceil(width*scale);
-          canvas.height = Math.ceil(height*scale);
-          ctx.scale(scale, scale);
-          ctx.font = font;
-          // Fondo + borde redondeado
-          const r = 10;
-          ctx.fillStyle = bg;
-          ctx.strokeStyle = border;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(pad+r, pad);
-          ctx.lineTo(width-pad-r, pad);
-          ctx.quadraticCurveTo(width-pad, pad, width-pad, pad+r);
-          ctx.lineTo(width-pad, height-pad-r);
-          ctx.quadraticCurveTo(width-pad, height-pad, width-pad-r, height-pad);
-          ctx.lineTo(pad+r, height-pad);
-          ctx.quadraticCurveTo(pad, height-pad, pad, height-pad-r);
-          ctx.lineTo(pad, pad+r);
-          ctx.quadraticCurveTo(pad, pad, pad+r, pad);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          // Texto
-          ctx.fillStyle = fg;
-          ctx.textBaseline = 'middle';
-          lines.forEach((l, i) => {
-            const tm = ctx.measureText(l);
-            ctx.fillText(l, (width - tm.width)/2, pad + lineHeight*(i+0.5));
-          });
-          const tex = new THREE.CanvasTexture(canvas);
-          tex.minFilter = THREE.LinearFilter;
-          tex.magFilter = THREE.LinearFilter;
-          const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true });
-          const sprite = new THREE.Sprite(mat);
-          const uiWorldSize = opts.worldSize ?? 0.9;
-          sprite.scale.set(uiWorldSize * (width/height), uiWorldSize, 1);
-          sprite.renderOrder = 999;
-          return sprite;
+        const eGeo=new THREE.SphereGeometry(.20,24,24);
+        function addElectrons(group,count,a,b,speed,phase0=0){
+          const arr=[];
+          for(let i=0;i<count;i++){
+            const m=new THREE.Mesh(eGeo,electronMat);
+            const phase=phase0 + i*(Math.PI*2/count);
+            m.userData={a,b,phase,speed:speed*(0.95+0.1*Math.random())};
+            group.add(m); arr.push(m);
+          }
+          return arr;
         }
+        const eK=addElectrons(K,2,aK,bK,1.0);
+        const eL=addElectrons(L,6,aL,bL,0.7,Math.PI/6);
 
-        const labelNucleo = makeTextSprite('Núcleo', { worldSize: 0.9 });
-        labelNucleo.position.set(0, 1.6, 0);
-        nucleo.add(labelNucleo); labelGroup.add(labelNucleo);
-
-        const labelEjElectron = makeTextSprite('e⁻', { worldSize: 0.5 });
-        labelEjElectron.position.set(0, 0.45, 0);
-        electronRefs[0].add(labelEjElectron); labelGroup.add(labelEjElectron);
-
-        // ===== Controles integrados (sin OrbitControls) =====
-        class SimpleOrbit {
-          constructor(camera, dom, target=new THREE.Vector3(0,0,0)){
-            this.camera = camera; this.dom = dom; this.target = target.clone();
-            this.spherical = new THREE.Spherical();
-            const offset = new THREE.Vector3().copy(camera.position).sub(this.target);
-            this.spherical.setFromVector3(offset);
-            this.minDistance = 3.2; this.maxDistance = 18;
-            this.rotateSpeed = 1.0; this.zoomSpeed = 1.0;
-            this.damping = 0.1;
-            this._deltaTheta = 0; this._deltaPhi = 0; this._scale = 1;
-            this.autoRotate = false;
-            this.autoRotateSpeed = 0.8;
-            this._state = null;
-            this._pointer = new THREE.Vector2();
-            this._pointerStart = new THREE.Vector2();
-            this._touchDistance = 0;
-            dom.addEventListener('pointerdown', e=>this.onPointerDown(e));
-            window.addEventListener('pointermove', e=>this.onPointerMove(e));
-            window.addEventListener('pointerup', e=>this.onPointerUp(e), {passive:true});
-            dom.addEventListener('wheel', e=>this.onWheel(e), { passive:false });
-            dom.addEventListener('touchstart', e=>this.onTouchStart(e), { passive:false });
-            dom.addEventListener('touchmove', e=>this.onTouchMove(e), { passive:false });
-            dom.addEventListener('touchend', e=>this.onTouchEnd(e));
-          }
-          onPointerDown(e){ this.dom.setPointerCapture(e.pointerId); this._state='rotate'; this._pointerStart.set(e.clientX, e.clientY); }
-          onPointerMove(e){
-            if (this._state !== 'rotate') return;
-            this._pointer.set(e.clientX, e.clientY);
-            const dx = (this._pointer.x - this._pointerStart.x) / this.dom.clientHeight;
-            const dy = (this._pointer.y - this._pointerStart.y) / this.dom.clientHeight;
-            this._deltaTheta -= 2*Math.PI * dx * this.rotateSpeed;
-            this._deltaPhi   -= 2*Math.PI * dy * this.rotateSpeed * 0.6;
-            this._pointerStart.copy(this._pointer);
-          }
-          onPointerUp(){ this._state = null; }
-          onWheel(e){ e.preventDefault(); const delta = e.deltaY > 0 ? 1 : -1; const f = 1 + 0.08*this.zoomSpeed; this._scale *= delta>0 ? f : 1/f; }
-          onTouchStart(e){
-            if (e.touches.length===1){ this._state='rotate'; this._pointerStart.set(e.touches[0].clientX, e.touches[0].clientY); }
-            else if (e.touches.length===2){ this._state='zoom'; const dx=e.touches[0].clientX-e.touches[1].clientX; const dy=e.touches[0].clientY-e.touches[1].clientY; this._touchDistance=Math.hypot(dx,dy); }
-          }
-          onTouchMove(e){
-            if (this._state==='rotate' && e.touches.length===1){
-              const x=e.touches[0].clientX, y=e.touches[0].clientY;
-              const dx=(x-this._pointerStart.x)/this.dom.clientHeight;
-              const dy=(y-this._pointerStart.y)/this.dom.clientHeight;
-              this._deltaTheta -= 2*Math.PI * dx * this.rotateSpeed;
-              this._deltaPhi   -= 2*Math.PI * dy * this.rotateSpeed * 0.6;
-              this._pointerStart.set(x,y);
-            } else if (this._state==='zoom' && e.touches.length===2){
-              const dx=e.touches[0].clientX-e.touches[1].clientX;
-              const dy=e.touches[0].clientY-e.touches[1].clientY;
-              const dist=Math.hypot(dx,dy);
-              const f = 1 + (Math.abs(dist-this._touchDistance)/200) * this.zoomSpeed;
-              this._scale *= dist < this._touchDistance ? f : 1/f;
-              this._touchDistance = dist;
-            }
-            e.preventDefault();
-          }
-          onTouchEnd(){ this._state=null; }
-          reset(){
-            const offset = new THREE.Vector3(0,2.1,7.5).sub(this.target);
-            this.spherical.setFromVector3(offset);
-          }
-          update(dt){
-            if (this.autoRotate){ this._deltaTheta -= this.autoRotateSpeed * dt; }
-            this.spherical.theta += this._deltaTheta * this.damping;
-            this.spherical.phi   += this._deltaPhi   * this.damping;
-            this.spherical.makeSafe();
-            this.spherical.radius *= this._scale;
-            this.spherical.radius = Math.min(this.maxDistance, Math.max(this.minDistance, this.spherical.radius));
-            this._deltaTheta *= (1 - this.damping);
-            this._deltaPhi   *= (1 - this.damping);
-            this._scale = 1;
-            const offset = new THREE.Vector3().setFromSpherical(this.spherical);
-            this.camera.position.copy(this.target).add(offset);
-            this.camera.lookAt(this.target);
-          }
+        // ===== Etiquetas (sprites) =====
+        function makeSprite(text,ws=0.9){
+          const pad=8,font='700 22px ui-sans-serif, -apple-system, Segoe UI, Roboto';
+          const c=document.createElement('canvas'),x=c.getContext('2d'); x.font=font;
+          const Ls=String(text).split('\n'), lh=28, w=Math.max(...Ls.map(l=>x.measureText(l).width))+pad*2, h=lh*Ls.length+pad*2, s=2;
+          c.width=w*s; c.height=h*s; x.scale(s,s); x.font=font;
+          x.fillStyle='rgba(2,6,23,.80)'; x.strokeStyle='rgba(148,163,184,.35)'; x.lineWidth=1;
+          const r=10; x.beginPath(); x.moveTo(pad+r,pad); x.lineTo(w/s-pad-r,pad); x.quadraticCurveTo(w/s-pad,pad,w/s-pad,pad+r);
+          x.lineTo(w/s-pad,h/s-pad-r); x.quadraticCurveTo(w/s-pad,h/s-pad,w/s-pad-r,h/s-pad);
+          x.lineTo(pad+r,h/s-pad); x.quadraticCurveTo(pad,h/s-pad,pad,h/s-pad-r); x.lineTo(pad,pad+r);
+          x.quadraticCurveTo(pad,pad,pad+r,pad); x.closePath(); x.fill(); x.stroke();
+          x.fillStyle='#e5e7eb'; x.textBaseline='middle';
+          Ls.forEach((l,i)=>{ const tm=x.measureText(l); x.fillText(l,(w/s - tm.width)/2,pad+lh*(i+.5)); });
+          const tex=new THREE.CanvasTexture(c); tex.minFilter=THREE.LinearFilter; tex.magFilter=THREE.LinearFilter;
+          const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,depthWrite:false,transparent:true}));
+          sp.scale.set(ws*(w/h),ws,1); sp.renderOrder=999; return sp;
         }
-        const orbit = new SimpleOrbit(camera, renderer.domElement);
-        orbit.autoRotate = false;
+        const lN=makeSprite('Núcleo',.9); lN.position.set(0,1.6,0); nucleo.add(lN);
+        const lK=makeSprite('Capa K — 2 e⁻',.9); lK.position.set(aK+.3, 0.0, 0.0); K.add(lK);
+        const lL=makeSprite('Capa L — 6 e⁻',.9); lL.position.set(aL+.3, 0.0, 0.0); L.add(lL);
+        // Etiquetas p⁺ y n⁰ de ejemplo
+        const spP=makeSprite('p⁺',0.55); protons[0].add(spP); spP.position.set(0, nucleonR+0.18, 0);
+        const spN=makeSprite('n⁰',0.55); neutrons[0].add(spN); spN.position.set(0, nucleonR+0.18, 0);
+        const sprites=[lN,lK,lL,spP,spN]; sprites.forEach(s=> s.visible=false);
 
-        // Giroscopio básico
-        let gyroActive = false;
-        let baseBeta = null, baseGamma = null;
+        // Controles
+        class SimpleOrbit{ constructor(cam,dom,target=new THREE.Vector3()){
+          this.camera=cam; this.dom=dom; this.target=target.clone(); this.spherical=new THREE.Spherical();
+          const off=new THREE.Vector3().copy(cam.position).sub(this.target); this.spherical.setFromVector3(off);
+          this.minDistance=3.2; this.maxDistance=18; this.rotateSpeed=1.0; this.zoomSpeed=1.0; this.damping=.1;
+          this._dTh=0; this._dPh=0; this._scale=1; this.autoRotate=false; this.autoRotateSpeed=.7;
+          this._state=null; this._p0=new THREE.Vector2(); this._touchDist=0;
+          dom.addEventListener('pointerdown',e=>{dom.setPointerCapture(e.pointerId); this._state='rot'; this._p0.set(e.clientX,e.clientY);});
+          addEventListener('pointermove',e=>{ if(this._state!=='rot') return; const dx=(e.clientX-this._p0.x)/dom.clientHeight, dy=(e.clientY-this._p0.y)/dom.clientHeight; this._dTh-=2*Math.PI*dx*this.rotateSpeed; this._dPh-=2*Math.PI*dy*this.rotateSpeed*.6; this._p0.set(e.clientX,e.clientY);});
+          addEventListener('pointerup',()=>this._state=null,{passive:true});
+          dom.addEventListener('wheel',e=>{e.preventDefault(); const d=e.deltaY>0?1:-1, f=1+.08*this.zoomSpeed; this._scale*=d>0?f:1/f;},{passive:false});
+          dom.addEventListener('touchstart',e=>{ if(e.touches.length===1){this._state='rot'; this._p0.set(e.touches[0].clientX,e.touches[0].clientY);} else if(e.touches.length===2){this._state='zoom'; const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY; this._touchDist=Math.hypot(dx,dy);} },{passive:false});
+          dom.addEventListener('touchmove',e=>{ if(this._state==='rot'&&e.touches.length===1){ const x=e.touches[0].clientX,y=e.touches[0].clientY, dx=(x-this._p0.x)/dom.clientHeight, dy=(y-this._p0.y)/dom.clientHeight; this._dTh-=2*Math.PI*dx*this.rotateSpeed; this._dPh-=2*Math.PI*dy*this.rotateSpeed*.6; this._p0.set(x,y);} else if(this._state==='zoom'&&e.touches.length===2){ const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY, dist=Math.hypot(dx,dy), f=1+(Math.abs(dist-this._touchDist)/200)*this.zoomSpeed; this._scale*= dist<this._touchDist ? f : 1/f; this._touchDist=dist;} e.preventDefault(); },{passive:false});
+          dom.addEventListener('touchend',()=>this._state=null);
+        }
+          reset(){ const off=new THREE.Vector3(0,2.1,7.5).sub(this.target); this.spherical.setFromVector3(off); }
+          update(dt){ if(this.autoRotate) this._dTh -= this.autoRotateSpeed*dt; this.spherical.theta+=this._dTh*this.damping; this.spherical.phi+=this._dPh*this.damping; this.spherical.makeSafe();
+            this.spherical.radius*=this._scale; this.spherical.radius=Math.min(this.maxDistance,Math.max(this.minDistance,this.spherical.radius));
+            this._dTh*=(1-this.damping); this._dPh*=(1-this.damping); this._scale=1; const off=new THREE.Vector3().setFromSpherical(this.spherical); this.camera.position.copy(this.target).add(off); this.camera.lookAt(this.target); } }
+        const orbit=new SimpleOrbit(camera, renderer.domElement);
+
+        // Giroscopio
+        let gyro=false, bB=null, bG=null;
         function enableGyro(){
-          const anyDevOrient = window.DeviceOrientationEvent;
-          const attach = ()=>{
-            gyroActive = true;
-            baseBeta = null; baseGamma = null;
-            window.addEventListener('deviceorientation', (e)=>{
-              if (!gyroActive) return;
-              if (baseBeta === null){ baseBeta = e.beta || 0; baseGamma = e.gamma || 0; return; }
-              const dBeta = (e.beta || 0) - baseBeta;
-              const dGamma = (e.gamma || 0) - baseGamma;
-              orbit._deltaPhi   -= (dBeta * Math.PI/180) * 0.5;
-              orbit._deltaTheta += (dGamma * Math.PI/180) * 0.5;
-            });
-          };
-          if (anyDevOrient && typeof anyDevOrient.requestPermission === 'function'){
-            anyDevOrient.requestPermission().then(state => {
-              if (state === 'granted'){ attach(); }
-              else alert('Permiso denegado. Puedes usar el dedo para rotar o activar auto-rotación.');
-            }).catch(err => alert('No se pudo solicitar permiso: ' + err));
-          } else { attach(); }
+          const any=window.DeviceOrientationEvent;
+          const attach=()=>{ gyro=true; bB=null; bG=null; addEventListener('deviceorientation',e=>{ if(!gyro) return; if(bB===null){ bB=e.beta||0; bG=e.gamma||0; return; } const dB=(e.beta||0)-bB, dG=(e.gamma||0)-bG; orbit._dPh -= (dB*Math.PI/180)*.5; orbit._dTh += (dG*Math.PI/180)*.5; }); };
+          if(any && typeof any.requestPermission==='function'){ any.requestPermission().then(s=>{ if(s==='granted') attach(); else alert('Permiso denegado.'); }).catch(()=>{}); } else attach();
         }
 
         // HUD
-        const gyroBtn = document.getElementById('gyroBtn');
-        const labelsBtn = document.getElementById('labelsBtn');
-        const autoBtn = document.getElementById('autoBtn');
-        const resetBtn = document.getElementById('resetBtn');
-
-        let labelsVisible = false;
-        labelsBtn.addEventListener('click', ()=>{
-          labelsVisible = !labelsVisible;
-          labelGroup.visible = labelsVisible;
+        const gyroBtn=document.getElementById('gyroBtn'), labelsBtn=document.getElementById('labelsBtn'), autoBtn=document.getElementById('autoBtn'), resetBtn=document.getElementById('resetBtn');
+        let labelsVisible=false;
+        labelsBtn.addEventListener('click',()=>{
+          labelsVisible=!labelsVisible;
+          sprites.forEach(s=> s.visible=labelsVisible);
           labelsBtn.textContent = labelsVisible ? 'Ocultar etiquetas' : 'Mostrar etiquetas';
           labelsBtn.classList.toggle('primary', labelsVisible);
         });
-
-        autoBtn.addEventListener('click', ()=>{
-          orbit.autoRotate = !orbit.autoRotate;
-          autoBtn.classList.toggle('primary', orbit.autoRotate);
-          autoBtn.textContent = orbit.autoRotate ? 'Detener auto-rotación' : 'Auto-rotar';
-        });
-        resetBtn.addEventListener('click', ()=>{ orbit.reset(); });
-        gyroBtn.addEventListener('click', ()=>{
-          if (!gyroActive){ enableGyro(); gyroBtn.textContent='Giroscopio activo'; gyroBtn.disabled = true; }
-        });
+        autoBtn.addEventListener('click',()=>{ orbit.autoRotate=!orbit.autoRotate; autoBtn.classList.toggle('primary', orbit.autoRotate); autoBtn.textContent=orbit.autoRotate?'Detener auto-rotación':'Auto-rotar'; });
+        resetBtn.addEventListener('click',()=> orbit.reset());
+        gyroBtn.addEventListener('click',()=>{ if(!gyro){ enableGyro(); gyroBtn.textContent='Giroscopio activo'; gyroBtn.disabled=true; } });
 
         // Animación
-        const clock = new THREE.Clock();
-        function animate(){
-          const dt = clock.getDelta();
-          const t = clock.elapsedTime;
-
-          // Pulso núcleo
-          nucleo.scale.setScalar(1 + Math.sin(t*1.6)*0.015);
-
-          // Avanzar cada electrón en su órbita
-          for (const obj of electrons){
-            const e = obj.mesh;
-            const data = e.userData;
-            data.angle += data.speed * dt;
-            const x = data.a * Math.cos(data.angle);
-            const z = data.b * Math.sin(data.angle);
-            e.position.set(x, 0, z);
+        const clock=new THREE.Clock();
+        function stepElectrons(arr,dt){ for(const m of arr){ const d=m.userData; d.phase+=d.speed*dt; m.position.set(d.a*Math.cos(d.phase),0,d.b*Math.sin(d.phase)); } }
+        function stepNucleons(arr,amp,t){
+          for(const m of arr){
+            const base = m.userData.base;
+            const ph = m.userData.phase;
+            m.position.set(base.x + Math.sin(t*1.8 + ph)*amp, base.y + Math.cos(t*2.1 + ph)*amp*0.9, base.z + Math.sin(t*1.6 + ph*1.3)*amp*0.8);
           }
-
-          orbit.update(dt);
-          renderer.render(scene, camera);
-          requestAnimationFrame(animate);
         }
+        function animate(){ const dt=clock.getDelta(); const t=clock.elapsedTime;
+          nucleo.scale.setScalar(1+Math.sin(t*1.6)*.015);
+          stepElectrons(eK,dt); stepElectrons(eL,dt);
+          stepNucleons(protons, 0.035, t); stepNucleons(neutrons, 0.035, t);
+          orbit.update(dt); renderer.render(scene,camera); requestAnimationFrame(animate); }
         animate();
 
-        window.addEventListener('resize', () => {
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
-          renderer.setSize(window.innerWidth, window.innerHeight);
-        }, { passive:true });
-
-      } catch (e){
-        showErr('Excepción al iniciar: ' + (e?.message || e));
-        console.error(e);
-      }
+        addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); },{passive:true});
+      }catch(e){ showErr('Excepción al iniciar: '+(e?.message||e)); console.error(e); }
     })();
   </script>
 </body>
