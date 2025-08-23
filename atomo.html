@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <link rel="icon" href="atomo.png" size="32x32" />
-  <title>Átomo de Oxígeno 3D — Núcleo transparente (v6.5)</title>
+  <title>Átomo de Oxígeno 3D — etiquetas corregidas (v6.6)</title>
   <meta name="theme-color" content="#14b8a6" />
   <style>
     html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b1220; color:#e5e7eb; }
@@ -81,31 +81,21 @@
         const protonMat=new THREE.MeshPhysicalMaterial({color:0xef4444, roughness:.3, metalness:.2});
         const neutronMat=new THREE.MeshPhysicalMaterial({color:0x60a5fa, roughness:.35, metalness:.15});
 
-        // Núcleo transparente (para ver los nucleones)
+        // Núcleo transparente
         const nucleusRadius = 1.15;
         const nucleoMat=new THREE.MeshPhysicalMaterial({
-          color: 0xf59e0b,
-          roughness: 0.2,
-          metalness: 0.15,
-          clearcoat: 0.2,
-          transparent: true,
-          opacity: 0.42,      // ~42% visible
-          depthWrite: false,  // para no tapar a los nucleones detrás
-          side: THREE.DoubleSide
+          color: 0xf59e0b, roughness: 0.2, metalness: 0.15, clearcoat: 0.2,
+          transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide
         });
         const nucleo=new THREE.Mesh(new THREE.SphereGeometry(nucleusRadius,64,64), nucleoMat); scene.add(nucleo);
 
-        // ========= Nucleones (8 p+, 8 n0) =========
+        // ========= Nucleones =========
         const nucleonR = 0.22;
         const innerR = nucleusRadius - (nucleonR + 0.10);
         const nucleones = new THREE.Group(); nucleo.add(nucleones);
 
         function v(x,y,z){ return new THREE.Vector3(x,y,z); }
-        const cubeDirs = [
-          v(1,1,1), v(1,1,-1), v(1,-1,1), v(1,-1,-1),
-          v(-1,1,1), v(-1,1,-1), v(-1,-1,1), v(-1,-1,-1),
-        ].map(vv => vv.normalize());
-
+        const cubeDirs = [ v(1,1,1), v(1,1,-1), v(1,-1,1), v(1,-1,-1), v(-1,1,1), v(-1,1,-1), v(-1,-1,1), v(-1,-1,-1) ].map(vv => vv.normalize());
         const rotQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(DEG(25), DEG(35), DEG(-15)));
         const cubeDirsRot = cubeDirs.map(vv => vv.clone().applyQuaternion(rotQ));
 
@@ -123,7 +113,6 @@
           nucleones.add(m); arr.push(m);
           return m;
         }
-
         for(let i=0;i<8;i++){ placeAt(cubeDirs[i], protonMat, protons); }
         for(let i=0;i<8;i++){ placeAt(cubeDirsRot[i], neutronMat, neutrons); }
 
@@ -155,29 +144,70 @@
         const eK=addElectrons(K,2,aK,bK,1.0);
         const eL=addElectrons(L,6,aL,bL,0.7,Math.PI/6);
 
-        // ===== Etiquetas (sprites) =====
-        function makeSprite(text,ws=0.9){
-          const pad=8,font='700 22px ui-sans-serif, -apple-system, Segoe UI, Roboto';
-          const c=document.createElement('canvas'),x=c.getContext('2d'); x.font=font;
-          const Ls=String(text).split('\n'), lh=28, w=Math.max(...Ls.map(l=>x.measureText(l).width))+pad*2, h=lh*Ls.length+pad*2, s=2;
-          c.width=w*s; c.height=h*s; x.scale(s,s); x.font=font;
-          x.fillStyle='rgba(2,6,23,.80)'; x.strokeStyle='rgba(148,163,184,.35)'; x.lineWidth=1;
-          const r=10; x.beginPath(); x.moveTo(pad+r,pad); x.lineTo(w/s-pad-r,pad); x.quadraticCurveTo(w/s-pad,pad,w/s-pad,pad+r);
-          x.lineTo(w/s-pad,h/s-pad-r); x.quadraticCurveTo(w/s-pad,h/s-pad,w/s-pad-r,h/s-pad);
-          x.lineTo(pad+r,h/s-pad); x.quadraticCurveTo(pad,h/s-pad,pad,h/s-pad-r); x.lineTo(pad,pad+r);
-          x.quadraticCurveTo(pad,pad,pad+r,pad); x.closePath(); x.fill(); x.stroke();
-          x.fillStyle='#e5e7eb'; x.textBaseline='middle';
-          Ls.forEach((l,i)=>{ const tm=x.measureText(l); x.fillText(l,(w/s - tm.width)/2,pad+lh*(i+.5)); });
-          const tex=new THREE.CanvasTexture(c); tex.minFilter=THREE.LinearFilter; tex.magFilter=THREE.LinearFilter;
-          const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,depthTest:false,depthWrite:false,transparent:true}));
-          sp.scale.set(ws*(w/h),ws,1); sp.renderOrder=999; return sp;
+        // ===== Etiquetas (sprites) — FIX recorte =====
+        function makeSprite(text, worldSize=0.9){
+          const pad = 14;
+          const fontSize = 24;
+          const font = `700 ${fontSize}px ui-sans-serif, -apple-system, Segoe UI, Roboto`;
+          const c = document.createElement('canvas');
+          const x = c.getContext('2d');
+          x.font = font;
+          const lines = String(text).split('\n');
+          // medir alto real de la fuente
+          const metr = x.measureText('Mg');
+          const ascent = metr.actualBoundingBoxAscent || fontSize*0.8;
+          const descent = metr.actualBoundingBoxDescent || fontSize*0.2;
+          const fontHeight = ascent + descent;
+          const lineHeight = Math.ceil(fontHeight * 1.2);
+          const textWidth = Math.max(...lines.map(l => x.measureText(l).width));
+          const width = Math.ceil(textWidth + pad*2);
+          const height = Math.ceil(lineHeight*lines.length + pad*2);
+          const scale = Math.max(2, Math.min(4, Math.round((window.devicePixelRatio||2))));
+          c.width = width * scale;
+          c.height = height * scale;
+          x.scale(scale, scale);
+          x.font = font;
+          // fondo redondeado
+          x.fillStyle = 'rgba(2,6,23,0.85)';
+          x.strokeStyle = 'rgba(148,163,184,0.35)';
+          x.lineWidth = 1;
+          const r = 10;
+          x.beginPath();
+          x.moveTo(pad+r, pad);
+          x.lineTo(width-pad-r, pad);
+          x.quadraticCurveTo(width-pad, pad, width-pad, pad+r);
+          x.lineTo(width-pad, height-pad-r);
+          x.quadraticCurveTo(width-pad, height-pad, width-pad-r, height-pad);
+          x.lineTo(pad+r, height-pad);
+          x.quadraticCurveTo(pad, height-pad, pad, height-pad-r);
+          x.lineTo(pad, pad+r);
+          x.quadraticCurveTo(pad, pad, pad+r, pad);
+          x.closePath();
+          x.fill();
+          x.stroke();
+          // texto
+          x.fillStyle = '#e5e7eb';
+          x.textBaseline = 'alphabetic';
+          lines.forEach((l,i) => {
+            const tm = x.measureText(l);
+            const y = pad + i*lineHeight + ascent + (lineHeight - fontHeight)/2;
+            x.fillText(l, (width - tm.width)/2, y);
+          });
+          const tex = new THREE.CanvasTexture(c);
+          tex.minFilter = THREE.LinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.generateMipmaps = false;
+          const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true });
+          const sp = new THREE.Sprite(mat);
+          sp.scale.set(worldSize * (width/height), worldSize, 1);
+          sp.renderOrder = 999;
+          return sp;
         }
         const lN=makeSprite('Núcleo',.9); lN.position.set(0,1.6,0); nucleo.add(lN);
         const lK=makeSprite('Capa K — 2 e⁻',.9); lK.position.set(aK+.3, 0.0, 0.0); K.add(lK);
         const lL=makeSprite('Capa L — 6 e⁻',.9); lL.position.set(aL+.3, 0.0, 0.0); L.add(lL);
-        // Etiquetas p⁺ y n⁰ de ejemplo
-        const spP=makeSprite('p⁺',0.55); protons[0].add(spP); spP.position.set(0, nucleonR+0.18, 0);
-        const spN=makeSprite('n⁰',0.55); neutrons[0].add(spN); spN.position.set(0, nucleonR+0.18, 0);
+        const spP=makeSprite('p⁺',0.55); protons[0].add(spP); spP.position.set(0, 0.40, 0);
+        const spN=makeSprite('n⁰',0.55); neutrons[0].add(spN); spN.position.set(0, 0.40, 0);
         const sprites=[lN,lK,lL,spP,spN]; sprites.forEach(s=> s.visible=false);
 
         // Controles
