@@ -3,71 +3,108 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Generador de QR — Átomo de Oxígeno 3D</title>
+  <title>Generador de QR — Átomo de Oxígeno 3D (sin librerías)</title>
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto; background:#0b1220; color:#e5e7eb; padding: 24px; }
-    .card { max-width: 760px; margin: 0 auto; background: rgba(2,6,23,.7); border:1px solid rgba(148,163,184,.25); border-radius: 16px; padding: 20px; }
+    :root { color-scheme: dark; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto; background:#0b1220; color:#e5e7eb; margin:0; padding: 24px; }
+    .card { max-width: 820px; margin: 0 auto; background: rgba(2,6,23,.7); border:1px solid rgba(148,163,184,.25); border-radius: 16px; padding: 20px; }
+    h1 { margin: 0 0 6px 0; }
+    p { margin-top: 6px; opacity: .95; }
     input[type="text"]{ width:100%; padding:12px; border-radius:12px; border:1px solid rgba(148,163,184,.35); background:#111827; color:#e5e7eb; }
     label { display:block; margin-top:12px; font-size:14px; opacity:.9 }
     .row{ display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; }
-    .btn{ background:#0ea5e9; border:1px solid #38bdf8; color:#001018; padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:700; }
-    #qrcode{ background:white; padding:12px; display:inline-block; border-radius:12px; }
+    .btn{ background:#0ea5e9; border:1px solid #38bdf8; color:#001018; padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:700; text-decoration:none; display:inline-block; }
+    .btn.secondary{ background:#0f172a; color:#e5e7eb; border-color:rgba(148,163,184,.35) }
+    #qrcode{ background:white; padding:12px; display:inline-block; border-radius:12px; min-width:320px; min-height:320px; }
     small{ opacity:.8 }
+    #msg { margin-top:10px; color:#fbbf24; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Generar código QR</h1>
-    <p>1) Sube la carpeta <b>atomo-oxigeno</b> a tu hosting (p.ej. GitHub Pages, Netlify, tu servidor) y copia la URL pública de <code>/index.html</code>.<br>
-    2) Pega la URL abajo y presiona <b>Generar</b> para crear un QR listo para imprimir.</p>
-    <label for="url">URL pública de tu visor 3D:</label>
+    <p>1) Publica <b>index.html</b> y copia su URL pública.<br>
+    2) Pega esa URL abajo y presiona <b>Generar</b>. Puedes descargar PNG o SVG.</p>
+    <label for="url">URL pública del visor 3D:</label>
     <input type="text" id="url" placeholder="https://tudominio.com/atomo-oxigeno/index.html" value="https://example.com/atomo-oxigeno/index.html" />
     <div class="row">
       <button class="btn" id="make">Generar</button>
-      <a id="downloadPng" class="btn" download="qr_atomo_oxigeno.png">Descargar PNG</a>
-      <a id="downloadSvg" class="btn" download="qr_atomo_oxigeno.svg">Descargar SVG</a>
+      <a id="downloadPng" class="btn secondary" download="qr_atomo_oxigeno.png" href="#">Descargar PNG</a>
+      <a id="downloadSvg" class="btn secondary" download="qr_atomo_oxigeno.svg" href="#">Descargar SVG</a>
+      <button class="btn secondary" id="copyLink">Copiar enlace</button>
     </div>
+    <div id="msg"></div>
     <div style="margin-top:16px;">
-      <div id="qrcode"></div>
+      <img id="qrcode" alt="QR" width="320" height="320"/>
     </div>
-    <p><small>Usa un acortador de enlaces si tu URL es muy larga.</small></p>
+    <p><small>Tip: usa un acortador (bit.ly) si tu URL es muy larga para obtener un QR más compacto.</small></p>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-MrJ7Q0v0CSeK4eQ0bW3zH2c9x5yJpW3t6C1m0XkM8lH5rJ5e1gkQ3wCkL7Wn7s9fS4J6cL2o3bOxmF2yN2R2/A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
-    const qre = document.getElementById('qrcode');
-    const urlInput = document.getElementById('url');
+    const input = document.getElementById('url');
+    const img = document.getElementById('qrcode');
     const makeBtn = document.getElementById('make');
     const dlPng = document.getElementById('downloadPng');
     const dlSvg = document.getElementById('downloadSvg');
+    const copyBtn = document.getElementById('copyLink');
+    const msg = document.getElementById('msg');
 
-    let qr = null;
-    function makeQR(){
-      qre.innerHTML = '';
-      qr = new QRCode(qre, {
-        text: urlInput.value.trim(),
-        width: 320, height: 320, correctLevel: QRCode.CorrectLevel.H
-      });
-      // Preparar descarga PNG
-      setTimeout(()=>{
-        const img = qre.querySelector('img');
-        if (img && img.src){
-          dlPng.href = img.src;
-        }
-      }, 200);
-
-      // Preparar descarga SVG (reconstruir como SVG vectorial)
-      const txt = urlInput.value.trim();
-      // Sencillo generador SVG usando path de módulos (del canvas interno)
-      // Nota: qrcodejs no expone directamente el mapa; para simplicidad, usamos la imagen PNG para vista rápida
-      dlSvg.addEventListener('click', (e)=>{
-        e.preventDefault();
-        alert('Para SVG vectorial perfecto te recomiendo https://www.qrcode-monkey.com/ con el mismo enlace.');
-      }, { once:true });
+    function sanitize(u){
+      try {
+        const url = new URL(u.trim());
+        return url.toString();
+      } catch {
+        return null;
+      }
     }
 
-    makeBtn.addEventListener('click', makeQR);
-    makeQR();
+    function qrsrcPNG(u){
+      return 'https://quickchart.io/qr?text=' + encodeURIComponent(u) + '&size=800&margin=10&ecLevel=H&format=png';
+    }
+    function qrsrcSVG(u){
+      return 'https://quickchart.io/qr?text=' + encodeURIComponent(u) + '&size=800&margin=10&ecLevel=H&format=svg';
+    }
+    function fallbackPNG(u){
+      return 'https://api.qrserver.com/v1/create-qr-code/?size=800x800&margin=10&data=' + encodeURIComponent(u);
+    }
+
+    async function generate(){
+      msg.textContent = '';
+      const u = sanitize(input.value);
+      if (!u){ msg.textContent = 'Por favor ingresa una URL válida (debe comenzar por http:// o https://).'; return; }
+
+      const urlPng = qrsrcPNG(u);
+      const urlSvg = qrsrcSVG(u);
+      try {
+        img.src = urlPng;
+        const resp = await fetch(urlPng, { mode:'cors' });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const blob = await resp.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        dlPng.href = objectUrl;
+        dlPng.classList.remove('secondary');
+        dlSvg.href = urlSvg;
+        dlSvg.classList.remove('secondary');
+      } catch (e){
+        img.src = fallbackPNG(u);
+        dlPng.href = img.src;
+        dlSvg.href = '#';
+        dlSvg.classList.add('secondary');
+        msg.textContent = 'No se pudo contactar al servicio principal de QR; usando alternativa.';
+      }
+    }
+
+    makeBtn.addEventListener('click', generate);
+    copyBtn.addEventListener('click', async ()=>{
+      try {
+        await navigator.clipboard.writeText(input.value.trim());
+        msg.textContent = 'Enlace copiado al portapapeles.';
+      } catch {
+        msg.textContent = 'No se pudo copiar; selecciona y usa Ctrl+C.';
+      }
+    });
+
+    generate();
   </script>
 </body>
 </html>
