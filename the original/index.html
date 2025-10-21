@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabla Periódica Viva</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Tabla Periódica Viva</h1>
+        
+        <div class="cuadro-color1" aria-hidden="true">
+            <div class="cuadro-color"><input type="button" class="alcalino" value="    "><span> </span><span>Alcalinos</span></div>
+            <div class="cuadro-color"><input type="button" class="alcalinoterreos" value="    "><span> </span><span>Alcalinoterreos</span></div>
+            <div class="cuadro-color"><input type="button"class="transicion" value="    " ><span> </span><span>Transición</span></div>
+            <div class="cuadro-color"><input type="button"class="despues-transicion" value="    "><span> </span><span>despues-transición</span></div>
+            <div class="cuadro-color"><input type="button"class="metaloides" value="    "><span> </span><span>Metaloides</span></div>
+            <div class="cuadro-color"><input type="button"class="nometales" value="    "><span> </span><span>Nometales</span></div>
+            <div class="cuadro-color"><input type="button"class="halogenos" value="    "><span> </span><span>Halógenos</span></div>
+            <div class="cuadro-color"><input type="button"class="gasesnobles" value="    "><span> </span><span>Gases nobles</span></div>
+            <div class="cuadro-color"><input type="button"class="lantanidos" value="    "><span> </span><span>Lantánidos</span></div>
+            <div class="cuadro-color"><input type="button" class="actinidos" value="    "><span> </span><span>Actínidos</span></div>
+        </div>
+
+        <div class="tablaperiodica" id="tablaperiodica" role="grid" aria-label="Tabla periódica"></div>
+
+        <div id="elementosModal" class="modal">
+            <div class="contenido">
+                <span class="close" aria-label="Cerrar">&times;</span>
+                <div id="elementosDisplay"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="elementos.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

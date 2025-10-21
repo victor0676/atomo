@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Átomo de Azufre</title>
+  <style>
+    body { font-family: Arial; background: #222; color: #fff; text-align: center; }
+    #atomo { margin: 40px auto; width: 300px; height: 300px; position: relative; }
+    .nucleo { width: 60px; height: 60px; background: gold; border-radius: 50%; position: absolute; top: 120px; left: 120px; }
+    .electron { width: 18px; height: 18px; background: cyan; border-radius: 50%; position: absolute; }
+    .label { margin-top: 20px; }
+    .orbita {
+      position: absolute;
+      border: 2px dashed #aaa;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    #orbita1 { width: 120px; height: 120px; left: 90px; top: 90px; }
+    #orbita2 { width: 180px; height: 180px; left: 60px; top: 60px; }
+    #orbita3 { width: 240px; height: 240px; left: 30px; top: 30px; }
+  </style>
+</head>
+<body>
+  <h1>Átomo de Azufre (S)</h1>
+  <div id="atomo">
+    <div class="nucleo"></div>
+    <div class="orbita" id="orbita1"></div>
+    <div class="orbita" id="orbita2"></div>
+    <div class="orbita" id="orbita3"></div>
+    <!-- Electrones se agregan por JS -->
+  </div>
+  <div class="label">
+    <strong>Electrones por capa:</strong> 2, 8, 6
+  </div>
+  <script>
+    const capas = [2, 8, 6];
+    const radios = [60, 90, 120];
+    let angle = 0;
+    let gyroX = 0;
+    let gyroY = 0;
+    let rotX = 0;
+    let rotY = 0;
+
+    // Crear electrones
+    let electrones = [];
+    let idx = 1;
+    capas.forEach((num, capa) => {
+      for (let i = 0; i < num; i++) {
+        const el = document.createElement('div');
+        el.className = 'electron';
+        el.id = 'electron' + idx;
+        document.getElementById('atomo').appendChild(el);
+        electrones.push({ el, capa, i, idx });
+        idx++;
+      }
+    });
+
+    // Giroscopio: actualiza los ángulos según el movimiento del dispositivo
+    if (window.DeviceOrientationEvent) {
+      window.addEventListener('deviceorientation', function(event) {
+        // event.beta: X (vertical), event.gamma: Y (horizontal)
+        gyroX = event.beta ? event.beta / 90 : 0;
+        gyroY = event.gamma ? event.gamma / 90 : 0;
+        rotX = event.beta ? event.beta : 0;
+        rotY = event.gamma ? event.gamma : 0;
+        // Aplica rotación 3D al átomo completo
+        document.getElementById('atomo').style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+      });
+    }
+
+    function moverElectrones() {
+      angle += 0.02 + gyroX * 0.05;
+      let eIdx = 0;
+      capas.forEach((num, capa) => {
+        for (let i = 0; i < num; i++) {
+          const electron = electrones[eIdx].el;
+          const r = radios[capa];
+          // El giro se modifica por el giroscopio
+          const a = angle + (i * (2 * Math.PI / num)) + gyroY * 2;
+          electron.style.left = (150 + Math.cos(a) * r - 9) + 'px';
+          electron.style.top = (150 + Math.sin(a) * r - 9) + 'px';
+          eIdx++;
+        }
+      });
+      requestAnimationFrame(moverElectrones);
+    }
+    moverElectrones();
+  </script>
+</body>
+</html>
