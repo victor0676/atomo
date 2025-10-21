@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Átomo de Boro (B-11) 3D</title>
+  <style>
+    /* Estilos CSS */
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b1220; color:#e5e7eb; }
+    #app { position:fixed; inset:0; }
+
+    .hud {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: 16px; display:flex; gap:.5rem; align-items:center;
+      background: rgba(2,6,23,.7); border:1px solid rgba(148,163,184,.25);
+      padding: .6rem .9rem; border-radius: 12px; backdrop-filter: blur(6px);
+      font-family: ui-sans-serif, system-ui, Segoe UI, Roboto;
+      z-index: 10;
+    }
+    .btn { border:1px solid rgba(148,163,184,.35); background:#0f172a; color:#e5e7eb;
+      padding:.45rem .8rem; border-radius:10px; cursor:pointer; font-weight:600; font-size:14px; }
+    .btn.primary { background:#14b8a6; border-color:#2dd4bf; color:#001010; }
+
+    .side-panel {
+      position: fixed; top: 0; right: -260px; width: 260px; height: 100%;
+      background: rgba(2,6,23,0.92); border-left: 1px solid rgba(148,163,184,.25);
+      transition: right 0.28s ease; padding: 1rem; z-index: 20;
+      font-family: ui-sans-serif, system-ui, Segoe UI, Roboto;
+    }
+    .side-panel.open { right: 0; }
+    .side-panel h3 { margin-top:0; font-size:16px; color:#14b8a6; }
+    .side-panel label { display:block; margin:.5rem 0; cursor:pointer; }
+
+    .toggle-btn {
+      position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+      background:#14b8a6; color:#001010; border-radius:8px 0 0 8px;
+      padding:.5rem; cursor:pointer; font-weight:600; z-index: 21;
+    }
+
+    .tooltip {
+      position: fixed; padding:6px 10px; background:rgba(0,0,0,0.75); color:#fff;
+      border-radius:6px; font-size:13px; pointer-events:none; opacity:0;
+      transition: opacity 0.12s ease, transform 0.12s ease;
+      z-index: 30;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="toggle-btn" id="togglePanel">☰</div>
+  <div class="side-panel" id="sidePanel">
+    <h3>Visibilidad</h3>
+    <label><input type="checkbox" id="chkNucleo" checked> Núcleo</label>
+    <label><input type="checkbox" id="chkProtones" checked> Protones</label>
+    <label><input type="checkbox" id="chkNeutrones" checked> Neutrones</label>
+    <label><input type="checkbox" id="chkElectrones" checked> Electrones</label>
+    <label><input type="checkbox" id="chkOrbitas" checked> Órbitas</label>
+  </div>
+  <div class="hud">
+    <button id="labelsBtn" class="btn">Mostrar etiquetas</button>
+    <button id="autoBtn" class="btn">Auto-rotar</button>
+    <button id="resetBtn" class="btn">Reiniciar vista</button>
+  </div>
+  <div class="tooltip" id="tooltip"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script>
+    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0b1220);
+    const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 1000);
+    camera.position.set(0,2.1,7.5);
+    const renderer=new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(innerWidth,innerHeight);
+    document.getElementById('app').appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff,.6));
+    const key=new THREE.PointLight(0xffffff,1.1); key.position.set(5,5,6); scene.add(key);
+    
+    // Variables para el control manual de la cámara
+    let isDragging = false;
+    let previousMousePosition = { x: 0, y: 0 };
+    const rotationSpeed = 0.005;
+
+    // EVENTOS DE CÁMARA MANUAL (ROTACIÓN Y ZOOM)
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return; 
+        isDragging = true;
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+        auto = false;
+        document.getElementById('autoBtn').classList.remove('primary');
+    });
+
+    renderer.domElement.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+
+        const deltaX = e.clientX - previousMousePosition.x;
+        const deltaY = e.clientY - previousMousePosition.y;
+        
+        scene.rotation.y += deltaX * rotationSpeed;
+        
+        const currentRotationX = scene.rotation.x + deltaY * rotationSpeed;
+        scene.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, currentRotationX));
+
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+    });
+
+    renderer.domElement.addEventListener('pointerup', () => {
+        isDragging = false;
+    });
+
+    renderer.domElement.addEventListener('wheel', (e) => {
+        const zoomFactor = 0.005;
+        const newPositionZ = camera.position.z + e.deltaY * zoomFactor;
+        camera.position.z = Math.max(3.0, Math.min(15.0, newPositionZ));
+    });
+
+    // materiales
+    const electronMat=new THREE.MeshPhysicalMaterial({color:0x34d399});
+    const protonMat=new THREE.MeshPhysicalMaterial({color:0xef4444});
+    const neutronMat=new THREE.MeshPhysicalMaterial({color:0x60a5fa});
+    const nucleoMat=new THREE.MeshPhysicalMaterial({color:0xf59e0b, transparent:true, opacity:.42});
+    const orbitaMat=new THREE.LineBasicMaterial({color:0xa78bfa,transparent:true,opacity:.7});
+
+    // núcleo (Boro-11: 5 Protones, 6 Neutrones)
+    const nucleo=new THREE.Mesh(new THREE.SphereGeometry(1.15,32,32),nucleoMat);
+    scene.add(nucleo);
+    const nucleones=new THREE.Group(); nucleo.add(nucleones);
+    const nucleonGeo=new THREE.SphereGeometry(0.22,24,24);
+    const protons=[], neutrons=[];
+    
+    // 5 Protones
+    for(let i=0;i<5;i++){ let m=new THREE.Mesh(nucleonGeo,protonMat); m.position.set(Math.random()-.5,Math.random()-.5,Math.random()-.5); nucleones.add(m); protons.push(m);}
+    // 6 Neutrones
+    for(let i=0;i<6;i++){ let m=new THREE.Mesh(nucleonGeo,neutronMat); m.position.set(Math.random()-.5,Math.random()-.5,Math.random()-.5); nucleones.add(m); neutrons.push(m);}
+
+    // órbitas
+    function ellipseLine(a,b,seg=240){const pts=[]; for(let i=0;i<seg;i++){const t=i/seg*Math.PI*2; pts.push(new THREE.Vector3(a*Math.cos(t),0,b*Math.sin(t)));} return new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), orbitaMat);}
+    const orbitsGroup=new THREE.Group(); scene.add(orbitsGroup);
+    const electronsGroup=new THREE.Group(); scene.add(electronsGroup);
+    const aK=2.4,bK=2.0,aL=3.8,bL=3.0; // Parámetros de órbita (K y L)
+    const orbitK=ellipseLine(aK,bK), orbitL=ellipseLine(aL,bL);
+    orbitsGroup.add(orbitK); orbitsGroup.add(orbitL);
+
+    // electrones organizados (5 e⁻: 2 en K, 3 en L)
+    const eGeo=new THREE.SphereGeometry(.20,18,18);
+    function addElectrons(group,count,a,b,speed,inclination=0.25){
+      const arr=[];
+      for(let i=0;i<count;i++){
+        const m=new THREE.Mesh(eGeo,electronMat);
+        const phase=i*(Math.PI*2/count);
+        const tilt=(i-count/2)*(inclination/count);
+        m.userData={a,b,phase,speed,tilt};
+        group.add(m); arr.push(m);
+      }
+      return arr;
+    }
+    const eK=addElectrons(electronsGroup,2,aK,bK,1.0,0.25); // Capa K: 2 e⁻
+    const eL=addElectrons(electronsGroup,3,aL,bL,0.7,0.4); // Capa L: 3 e⁻
+
+    function stepElectrons(arr,dt){
+      for(const m of arr){
+        const d=m.userData;
+        d.phase+=d.speed*dt;
+        const x=d.a*Math.cos(d.phase), z=d.b*Math.sin(d.phase);
+        let pos=new THREE.Vector3(x,0,z);
+        pos.applyAxisAngle(new THREE.Vector3(1,0,0), d.tilt);
+        m.position.copy(pos);
+      }
+    }
+
+    // etiquetas
+    function makeLabel(text){
+      const c=document.createElement('canvas'), x=c.getContext('2d');
+      x.font='20px sans-serif'; const w=x.measureText(text).width+20; const h=30;
+      c.width=w*2; c.height=h*2; x.scale(2,2); x.fillStyle='rgba(2,6,23,0.9)'; x.fillRect(0,0,w,h);
+      x.fillStyle='#e5e7eb'; x.fillText(text,10,20);
+      const tex=new THREE.CanvasTexture(c); const mat=new THREE.SpriteMaterial({map:tex,transparent:true});
+      const sp=new THREE.Sprite(mat); sp.scale.set(w/50,h/50,1); return sp;
+    }
+    const lN=makeLabel('Núcleo B-11 (5P, 6N)'); lN.position.set(0,1.6,0); nucleo.add(lN);
+    const lK=makeLabel('Capa K — 2 e⁻'); lK.position.set(aK+.3,0,0); orbitK.add(lK);
+    const lL=makeLabel('Capa L — 3 e⁻'); lL.position.set(aL+.3,0,0); orbitL.add(lL);
+    const labels=[lN,lK,lL]; labels.forEach(s=>s.visible=false);
+
+    // tooltip
+    const tooltip=document.getElementById('tooltip');
+    const raycaster=new THREE.Raycaster(); const pointer=new THREE.Vector2();
+    renderer.domElement.addEventListener('pointermove',e=>{
+      if(isDragging) return;
+      const rect=renderer.domElement.getBoundingClientRect();
+      pointer.x=((e.clientX-rect.left)/rect.width)*2-1;
+      pointer.y=-((e.clientY-rect.top)/rect.height)*2+1;
+      raycaster.setFromCamera(pointer,camera);
+      const ints=raycaster.intersectObjects([...protons,...neutrons,...eK,...eL,nucleo]);
+      if(ints.length>0){ tooltip.style.opacity=1; tooltip.textContent=ints[0].object===nucleo?'Núcleo de Boro (B-11)':ints[0].object.material===protonMat?'Protón':ints[0].object.material===neutronMat?'Neutrón':'Electrón'; tooltip.style.left=(e.clientX+10)+'px'; tooltip.style.top=(e.clientY+10)+'px';}
+      else tooltip.style.opacity=0;
+    });
+
+    // animación
+    const clock=new THREE.Clock();
+    let auto=false;
+    function animate(){
+        const dt=clock.getDelta(); 
+        stepElectrons(eK,dt); 
+        stepElectrons(eL,dt);
+        
+        // Rotación automática si está activada
+        if(auto) {
+            scene.rotation.y += 0.005; 
+        }
+        
+        labels.forEach(s=>s.quaternion.copy(camera.quaternion)); 
+        renderer.render(scene,camera); 
+        requestAnimationFrame(animate);
+    } 
+    animate();
+
+    // panel
+    const togglePanel=document.getElementById('togglePanel'), sidePanel=document.getElementById('sidePanel');
+    togglePanel.addEventListener('click',()=> sidePanel.classList.toggle('open'));
+    const chkN=document.getElementById('chkNucleo'), chkP=document.getElementById('chkProtones'), chkNe=document.getElementById('chkNeutrones'), chkE=document.getElementById('chkElectrones'), chkO=document.getElementById('chkOrbitas');
+    function update(){ nucleo.visible=chkN.checked; protons.forEach(p=>p.visible=chkP.checked); neutrons.forEach(n=>n.visible=chkNe.checked); electronsGroup.visible=chkE.checked; orbitsGroup.visible=chkO.checked; }
+    chkN.addEventListener('change',update);chkP.addEventListener('change',update);chkNe.addEventListener('change',update);chkE.addEventListener('change',update);chkO.addEventListener('change',update); update();
+
+    // HUD
+    const labelsBtn=document.getElementById('labelsBtn'), autoBtn=document.getElementById('autoBtn'), resetBtn=document.getElementById('resetBtn');
+    let labelsVisible=false; labelsBtn.addEventListener('click',()=>{labelsVisible=!labelsVisible;labels.forEach(s=>s.visible=labelsVisible);labelsBtn.textContent=labelsVisible?'Ocultar etiquetas':'Mostrar etiquetas';labelsBtn.classList.toggle('primary',labelsVisible);});
+    autoBtn.addEventListener('click',()=>{auto=!auto;autoBtn.classList.toggle('primary',auto);});
+    resetBtn.addEventListener('click',()=>{
+        camera.position.set(0,2.1,7.5);
+        scene.rotation.set(0, 0, 0);
+    });
+
+    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+  </script>
+</body>
+</html>
